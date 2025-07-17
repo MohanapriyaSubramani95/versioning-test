@@ -29,7 +29,7 @@ jobs:
           VERSION=$("./get-build-version.sh" "$ENVIRONMENT" "$COMPONENT" "$POSTFIX")
           echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Push tag with PAT token
+      - name: Push tag with PAT token using GIT_ASKPASS
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
           VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
@@ -38,5 +38,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --unset credential.helper || true
+
+          # Create temporary askpass helper script
+          export GIT_ASKPASS=$(mktemp)
+          echo "echo ${PAT_TOKEN}" > $GIT_ASKPASS
+          chmod +x $GIT_ASKPASS
+
+          # Create and push tag
           git tag "$VERSION_TAG"
-          git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git "$VERSION_TAG"
+          git push origin "$VERSION_TAG"
+
+          # Clean up
+          rm -f $GIT_ASKPASS
