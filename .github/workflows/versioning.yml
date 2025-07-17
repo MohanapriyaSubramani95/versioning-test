@@ -1,40 +1,39 @@
-name: Build & Tag Version
+name: Build & Tag Version (dev branch only)
 
 on:
   push:
     branches:
       - dev
-      - uat
-      - main  # Treat main as prod
 
 jobs:
   build_and_tag:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code with tags
+      - name: Checkout repo with full history and tags
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Important: fetch full history and tags
+          fetch-depth: 0
 
-      - name: Set up bash permissions
+      - name: Make script executable
         run: chmod +x ./get-build-version.sh
 
       - name: Generate version tag
         id: generate_tag
         run: |
-          ENVIRONMENT="${GITHUB_REF_NAME}"  # branch name like dev, uat, main
+          ENVIRONMENT="dev"
           COMPONENT="frontend"
           POSTFIX=$(git rev-parse --short HEAD)
           VERSION=$("./get-build-version.sh" "$ENVIRONMENT" "$COMPONENT" "$POSTFIX")
-          echo "Generated version: $VERSION"
           echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Push tag to remote
+      - name: Push tag with PAT token
         env:
           VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git
           git tag "$VERSION_TAG"
           git push origin "$VERSION_TAG"
