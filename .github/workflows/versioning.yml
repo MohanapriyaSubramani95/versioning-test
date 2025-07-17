@@ -1,19 +1,11 @@
-name: Build & Tag Version (dev branch only)
-
-on:
-  push:
-    branches:
-      - dev
-
 jobs:
   build_and_tag:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo with full history and tags
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch all commit history and tags
+          fetch-depth: 0
 
       - name: Make version script executable
         run: chmod +x ./get-build-version.sh
@@ -27,6 +19,7 @@ jobs:
           VERSION=$("./get-build-version.sh" "$ENVIRONMENT" "$COMPONENT" "$POSTFIX")
           echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
 
+      # <-- Add your push step here
       - name: Push tag with PAT token
         env:
           VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
