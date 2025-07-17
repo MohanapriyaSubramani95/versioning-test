@@ -1,0 +1,40 @@
+name: Build & Tag Version
+
+on:
+  push:
+    branches:
+      - dev
+      - uat
+      - main  # Treat main as prod
+
+jobs:
+  build_and_tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code with tags
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Important: fetch full history and tags
+
+      - name: Set up bash permissions
+        run: chmod +x ./get-build-version.sh
+
+      - name: Generate version tag
+        id: generate_tag
+        run: |
+          ENVIRONMENT="${GITHUB_REF_NAME}"  # branch name like dev, uat, main
+          COMPONENT="frontend"
+          POSTFIX=$(git rev-parse --short HEAD)
+          VERSION=$("./get-build-version.sh" "$ENVIRONMENT" "$COMPONENT" "$POSTFIX")
+          echo "Generated version: $VERSION"
+          echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Push tag to remote
+        env:
+          VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION_TAG"
+          git push origin "$VERSION_TAG"
