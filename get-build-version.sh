@@ -30,7 +30,7 @@ if [ "$current_environment" == "uat" ] || [ "$current_environment" == "prod" ]; 
   fi
 fi
 
-if [ $is_patch == true ]; then
+if [ "$is_patch" == true ]; then
   last_tag_pattern="$component_name-$current_environment-*"
   echo "Updated last_tag_pattern for patch: $last_tag_pattern"
 fi
@@ -59,12 +59,12 @@ fi
 
 echo "is_patch before version bump logic: $is_patch"
 
-if [ "$current_environment" == "prod" ] && [ $is_patch == false ]; then
+if [ "$current_environment" == "prod" ] && [ "$is_patch" == false ]; then
   major=$((major + 1))
   minor=0
   patch=0
   echo "Prod environment detected, bumped major version"
-elif [ "$current_environment" == "uat" ] && [ $is_patch == false ]; then
+elif [ "$current_environment" == "uat" ] && [ "$is_patch" == false ]; then
   minor=$((minor + 1))
   patch=0
   echo "Uat environment detected, bumped minor version"
@@ -75,4 +75,4 @@ fi
 
 echo "New version to output: $component_name-$current_environment-$major.$minor.$patch-$version_postfix"
 
-echo "$component_name-$current_environment-$major.$mi
+echo "$component_name-$current_environment-$major.$minor.$patch-$version_postfix"
