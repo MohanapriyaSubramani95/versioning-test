@@ -1,3 +1,9 @@
+on:
+  push:
+    branches:
+      - dev
+      - uat
+      - prod  # Treat main as prod
 jobs:
   build_and_tag:
     runs-on: ubuntu-latest
