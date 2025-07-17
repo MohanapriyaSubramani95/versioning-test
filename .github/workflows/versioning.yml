@@ -1,52 +1,26 @@
-name: Build and Tag
+name: Push Tag Example
 
 on:
   push:
     branches:
       - dev
-      - uat
-      - prod
+
+permissions:
+  contents: write
 
 jobs:
-  build_and_tag:
+  tag-and-push:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo with full history and tags
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Make version script executable
-        run: chmod +x ./get-build-version.sh
-
-      - name: Generate version tag
-        id: generate_tag
-        run: |
-          ENVIRONMENT="${{ github.ref_name }}"
-          COMPONENT="frontend"
-          POSTFIX=$(git rev-parse --short HEAD)
-          VERSION=$("./get-build-version.sh" "$ENVIRONMENT" "$COMPONENT" "$POSTFIX")
-          echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Push tag with PAT token using GIT_ASKPASS
+      - name: Tag and push with PAT
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-          VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
         run: |
-          echo "PAT_TOKEN length: ${#PAT_TOKEN}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global --unset credential.helper || true
-
-          # Create temporary askpass helper script
-          export GIT_ASKPASS=$(mktemp)
-          echo "echo ${PAT_TOKEN}" > $GIT_ASKPASS
-          chmod +x $GIT_ASKPASS
-
-          # Create and push tag
-          git tag "$VERSION_TAG"
-          git push origin "$VERSION_TAG"
-
-          # Clean up
-          rm -f $GIT_ASKPASS
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git tag test-tag-$(date +%s)
+          git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git --tags
