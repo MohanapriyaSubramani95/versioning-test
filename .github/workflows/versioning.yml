@@ -13,9 +13,9 @@ jobs:
       - name: Checkout repo with full history and tags
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Fetch all commit history and tags
 
-      - name: Make script executable
+      - name: Make version script executable
         run: chmod +x ./get-build-version.sh
 
       - name: Generate version tag
