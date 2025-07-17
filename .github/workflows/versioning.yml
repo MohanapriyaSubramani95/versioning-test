@@ -5,7 +5,7 @@ on:
     branches:
       - dev
       - uat
-      - prod  # prod branch
+      - prod
 
 jobs:
   build_and_tag:
@@ -29,16 +29,14 @@ jobs:
           VERSION=$("./get-build-version.sh" "$ENVIRONMENT" "$COMPONENT" "$POSTFIX")
           echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Configure Git for pushing tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: Push tag with PAT token
         env:
-          VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
         run: |
-          git remote set-url origin https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git
+          echo "PAT_TOKEN length: ${#PAT_TOKEN}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --unset credential.helper || true
           git tag "$VERSION_TAG"
-          git push origin "$VERSION_TAG"
+          git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git "$VERSION_TAG"
