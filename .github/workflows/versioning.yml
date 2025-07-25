@@ -1,0 +1,51 @@
+name: Build and Tag
+
+on:
+  push:
+    branches:
+      - dev
+      - uat
+      - prod
+
+permissions:
+  contents: write
+
+jobs:
+  build_and_tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo with full history and tags
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Make version script executable
+        run: chmod +x ./get-build-version.sh
+
+      - name: Generate version tag
+        id: generate_tag
+        run: |
+          # Get environment from branch name
+          ENVIRONMENT="${{ github.ref_name }}"
+          COMPONENT="frontend"
+          POSTFIX=$(git rev-parse --short HEAD)
+          
+          # Run your version script to get the tag string
+          VERSION=$("./get-build-version.sh" "$ENVIRONMENT" "$COMPONENT" "$POSTFIX")
+          
+          echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Push tag with PAT
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          VERSION_TAG: ${{ steps.generate_tag.outputs.version_tag }}
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+
+          # Create tag with version generated
+          git tag "$VERSION_TAG"
+
+          # Push tag using PAT token
+          git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git "$VERSION_TAG"
