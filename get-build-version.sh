@@ -1,41 +1,56 @@
 #!/bin/bash
 
-ENVIRONMENT=$1         # dev / uat / prod
-COMPONENT=$2           # e.g., frontend
-POSTFIX=$3             # short commit SHA
+ENVIRONMENT=$1       # dev / uat / prod
+COMPONENT=$2         # e.g., frontend
+POSTFIX=$3           # commit short hash
 
-# Fetch latest tag for the given environment and component
-LATEST_TAG=$(git tag --list "${COMPONENT}-${ENVIRONMENT}-*" --sort=-v:refname | head -n 1)
-
-# Default version if no tag found
-DEFAULT_VERSION="0.0.0"
-
-if [ -z "$LATEST_TAG" ]; then
-  BASE_VERSION=$DEFAULT_VERSION
+# Get latest prod tag version (major.minor.patch)
+LATEST_PROD_TAG=$(git tag --list "${COMPONENT}-prod-*" --sort=-v:refname | head -n 1)
+if [ -z "$LATEST_PROD_TAG" ]; then
+  PROD_MAJOR=0
+  PROD_MINOR=0
+  PROD_PATCH=0
 else
-  # Extract version part from tag: frontend-dev-0.0.1-abc123 → 0.0.1
-  BASE_VERSION=$(echo "$LATEST_TAG" | sed -E "s/^${COMPONENT}-${ENVIRONMENT}-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
+  PROD_VERSION=$(echo "$LATEST_PROD_TAG" | sed -E "s/^${COMPONENT}-prod-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
+  IFS='.' read -r PROD_MAJOR PROD_MINOR PROD_PATCH <<< "$PROD_VERSION"
 fi
 
-# Split BASE_VERSION into major, minor, patch
-IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+# Get latest tag for current environment
+LATEST_ENV_TAG=$(git tag --list "${COMPONENT}-${ENVIRONMENT}-*" --sort=-v:refname | head -n 1)
+if [ -z "$LATEST_ENV_TAG" ]; then
+  ENV_MAJOR=0
+  ENV_MINOR=0
+  ENV_PATCH=0
+else
+  ENV_VERSION=$(echo "$LATEST_ENV_TAG" | sed -E "s/^${COMPONENT}-${ENVIRONMENT}-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
+  IFS='.' read -r ENV_MAJOR ENV_MINOR ENV_PATCH <<< "$ENV_VERSION"
+fi
 
-# Increment version based on environment
 if [[ "$ENVIRONMENT" == "prod" ]]; then
-  ((MAJOR++))
+  # Prod: increment major, reset minor and patch
+  MAJOR=$((PROD_MAJOR + 1))
   MINOR=0
   PATCH=0
+
 elif [[ "$ENVIRONMENT" == "uat" ]]; then
-  ((MINOR++))
+  # UAT: keep prod major, increment minor, reset patch
+  MAJOR=$PROD_MAJOR
+  MINOR=$((PROD_MINOR + 1))
   PATCH=0
+
+elif [[ "$ENVIRONMENT" == "dev" ]]; then
+  # Dev: keep prod major & minor, increment patch based on last dev tag
+  MAJOR=$PROD_MAJOR
+  MINOR=$PROD_MINOR
+  # Patch = last dev patch + 1, or 0 if none
+  PATCH=$((ENV_PATCH + 1))
+
 else
-  ((PATCH++))
+  echo "Unknown environment: $ENVIRONMENT"
+  exit 1
 fi
 
-# Construct new version
 NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+NEW_TAG="${COMPONENT}-${ENVIRONMENT}-${NEW_VERSION}-${POSTFIX}"
 
-# Create final tag string
-FINAL_TAG="${COMPONENT}-${ENVIRONMENT}-${NEW_VERSION}-${POSTFIX}"
-
-echo "$FINAL_TAG"
+echo "$NEW_TAG"
