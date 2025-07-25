@@ -1,63 +1,61 @@
 #!/bin/bash
 
-current_environment=$1
-component_name=$2
-version_postfix=$3
+ENVIRONMENT=$1       # dev / uat / prod
+COMPONENT=$2         # e.g., frontend
+POSTFIX=$3           # commit short hash
 
-git fetch --tags
-
-# Get latest prod version (fallback to 0.0.0 if not found)
-prod_latest_tag=$(git tag --list "$component_name-prod-*" | sort -V | tail -n 1)
-
-prod_major=0
-prod_minor=0
-prod_patch=0
-
-if [[ -n "$prod_latest_tag" ]]; then
-  prod_version=$(echo "$prod_latest_tag" | cut -d- -f3)
-  prod_major=$(echo "$prod_version" | cut -d. -f1)
-  prod_minor=$(echo "$prod_version" | cut -d. -f2)
-  prod_patch=$(echo "$prod_version" | cut -d. -f3)
+# Get latest prod tag version (major.minor.patch)
+LATEST_PROD_TAG=$(git tag --list "${COMPONENT}-prod-*" --sort=-v:refname | head -n 1)
+if [ -z "$LATEST_PROD_TAG" ]; then
+  PROD_MAJOR=0
+  PROD_MINOR=0
+  PROD_PATCH=0
+else
+  PROD_VERSION=$(echo "$LATEST_PROD_TAG" | sed -E "s/^${COMPONENT}-prod-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
+  IFS='.' read -r PROD_MAJOR PROD_MINOR PROD_PATCH <<< "$PROD_VERSION"
 fi
 
-# Initialize version to prod version
-major=$prod_major
-minor=$prod_minor
-patch=0
-
-if [ "$current_environment" == "prod" ]; then
-  major=$((prod_major + 1))
-  minor=0
-  patch=0
-
-elif [ "$current_environment" == "uat" ]; then
-  # Find latest uat version
-  latest_uat_tag=$(git tag --list "$component_name-uat-*" | sort -V | tail -n 1)
-  if [[ -n "$latest_uat_tag" ]]; then
-    uat_version=$(echo "$latest_uat_tag" | cut -d- -f3)
-    uat_minor=$(echo "$uat_version" | cut -d. -f2)
-    minor=$((uat_minor + 1))
-  else
-    minor=$((prod_minor + 1))
-  fi
-  patch=0
-
-elif [ "$current_environment" == "dev" ]; then
-  latest_dev_tag=$(git tag --list "$component_name-dev-*" | sort -V | tail -n 1)
-  if [[ -n "$latest_dev_tag" ]]; then
-    dev_version=$(echo "$latest_dev_tag" | cut -d- -f3)
-    dev_major=$(echo "$dev_version" | cut -d. -f1)
-    dev_minor=$(echo "$dev_version" | cut -d. -f2)
-    dev_patch=$(echo "$dev_version" | cut -d. -f3)
-
-    if [[ "$dev_major" -eq "$prod_major" && "$dev_minor" -eq "$prod_minor" ]]; then
-      patch=$((dev_patch + 1))
-    else
-      patch=0
-    fi
-  else
-    patch=0
-  fi
+# Get latest tag for current environment
+LATEST_ENV_TAG=$(git tag --list "${COMPONENT}-${ENVIRONMENT}-*" --sort=-v:refname | head -n 1)
+if [ -z "$LATEST_ENV_TAG" ]; then
+  ENV_MAJOR=0
+  ENV_MINOR=0
+  ENV_PATCH=0
+else
+  ENV_VERSION=$(echo "$LATEST_ENV_TAG" | sed -E "s/^${COMPONENT}-${ENVIRONMENT}-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
+  IFS='.' read -r ENV_MAJOR ENV_MINOR ENV_PATCH <<< "$ENV_VERSION"
 fi
 
-echo "$component_name-$current_environment-$major.$minor.$patch-$version_postfix"
+if [[ "$ENVIRONMENT" == "prod" ]]; then
+  # Prod: increment major, reset minor and patch
+  MAJOR=$((PROD_MAJOR + 1))
+  MINOR=0
+  PATCH=0
+
+elif [[ "$ENVIRONMENT" == "uat" ]]; then
+  # UAT: keep prod major, increment minor, reset patch
+  MAJOR=$PROD_MAJOR
+  MINOR=$((PROD_MINOR + 1))
+  PATCH=0
+
+elif [[ "$ENVIRONMENT" == "dev" ]]; then
+  # Dev: keep prod major & minor
+  MAJOR=$PROD_MAJOR
+  MINOR=$PROD_MINOR
+
+  # Reset patch if last dev major/minor differ from prod
+  if [[ $ENV_MAJOR != $PROD_MAJOR ]] || [[ $ENV_MINOR != $PROD_MINOR ]]; then
+    PATCH=0
+  else
+    PATCH=$((ENV_PATCH + 1))
+  fi
+
+else
+  echo "Unknown environment: $ENVIRONMENT"
+  exit 1
+fi
+
+NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+NEW_TAG="${COMPONENT}-${ENVIRONMENT}-${NEW_VERSION}-${POSTFIX}"
+
+echo "$NEW_TAG"
