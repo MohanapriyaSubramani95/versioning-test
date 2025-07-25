@@ -39,11 +39,16 @@ elif [[ "$ENVIRONMENT" == "uat" ]]; then
   PATCH=0
 
 elif [[ "$ENVIRONMENT" == "dev" ]]; then
-  # Dev: keep prod major & minor, increment patch based on last dev tag
+  # Dev: keep prod major & minor
   MAJOR=$PROD_MAJOR
   MINOR=$PROD_MINOR
-  # Patch = last dev patch + 1, or 0 if none
-  PATCH=$((ENV_PATCH + 1))
+
+  # Reset patch if last dev major/minor differ from prod
+  if [[ $ENV_MAJOR != $PROD_MAJOR ]] || [[ $ENV_MINOR != $PROD_MINOR ]]; then
+    PATCH=0
+  else
+    PATCH=$((ENV_PATCH + 1))
+  fi
 
 else
   echo "Unknown environment: $ENVIRONMENT"
