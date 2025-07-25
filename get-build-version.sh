@@ -1,53 +1,53 @@
 #!/bin/bash
+set -e
 
-current_environment=$1      # dev / uat / prod
-component_name=$2           # e.g., booking
-version_postfix=$3          # e.g., build123
+component_name="frontend"
+branch_name=$(git rev-parse --abbrev-ref HEAD)
 
-git fetch --tags
-
-last_tag_pattern="$component_name-*"
-
-# Check if this is a patch-level change
-is_patch=false
-if [ "$current_environment" == "uat" ] || [ "$current_environment" == "prod" ]; then
-  current_commit=$(git rev-parse HEAD)
-  number_of_branches_with_commit=$(git branch -r --contains "$current_commit" | grep -E 'origin/(dev|uat|prod)' | wc -l)
-
-  if [ "$number_of_branches_with_commit" -eq 1 ]; then
-    is_patch=true
-  fi
+# Determine environment from branch name
+if [[ $branch_name == *"dev"* ]]; then
+  current_environment="dev"
+  bump_type="patch"
+elif [[ $branch_name == *"uat"* ]]; then
+  current_environment="uat"
+  bump_type="minor"
+elif [[ $branch_name == *"main"* || $branch_name == *"prod"* ]]; then
+  current_environment="prod"
+  bump_type="major"
+else
+  echo "Unsupported branch/environment"
+  exit 1
 fi
 
-# If it's a patch release, restrict search pattern
-if [ "$is_patch" = true ]; then
-  last_tag_pattern="$component_name-$current_environment-*"
-fi
+# Fetch all tags related to the component across all envs
+tag_pattern="$component_name-*-*"
+last_tag=$(git tag --list "$tag_pattern" | sort -V | tail -n 1)
 
-last_tag=$(git tag --list "$last_tag_pattern" | sort -V | tail -n1)
-
-major=0
-minor=0
-patch=0
-
-if [[ -n "$last_tag" ]]; then
-  version_number=$(echo "$last_tag" | cut -d- -f3)
-  major=$(echo "$version_number" | cut -d. -f1)
-  minor=$(echo "$version_number" | cut -d. -f2)
-  patch=$(echo "$version_number" | cut -d. -f3)
-fi
-
-# Version bump logic
-if [ "$current_environment" == "prod" ] && [ "$is_patch" = false ]; then
-  major=$((major + 1))
+# Extract version from last tag
+if [[ $last_tag =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+  major="${BASH_REMATCH[1]}"
+  minor="${BASH_REMATCH[2]}"
+  patch="${BASH_REMATCH[3]}"
+else
+  major=0
   minor=0
   patch=0
-elif [ "$current_environment" == "uat" ] && [ "$is_patch" = false ]; then
-  minor=$((minor + 1))
-  patch=0
-else
-  patch=$((patch + 1))
 fi
 
-final_version="$component_name-$current_environment-$major.$minor.$patch-$version_postfix"
-echo "$final_version"
+# Bump version
+if [[ $bump_type == "major" ]]; then
+  ((major++))
+  minor=0
+  patch=0
+elif [[ $bump_type == "minor" ]]; then
+  ((minor++))
+  patch=0
+elif [[ $bump_type == "patch" ]]; then
+  ((patch++))
+fi
+
+# Final tag
+commit_hash=$(git rev-parse --short HEAD)
+next_tag="$component_name-$current_environment-$major.$minor.$patch-$commit_hash"
+
+echo "$next_tag"
