@@ -10,14 +10,29 @@ last_tag_pattern="$component_name-*"
 
 is_patch=false
 
-if [ "$current_environment" == "uat" ] || [ "$current_environment" == "prod" ]; then
-  current_commit=$(git rev-parse HEAD)
-  number_of_branches_with_commit=$(git branch -r --contains "$current_commit" | grep -Ec "origin/(dev|uat|prod)")
+if [ "$current_environment" == "uat" ]; then
+  git fetch origin dev uat >/dev/null 2>&1
+  dev_commit=$(git rev-parse origin/dev)
+  uat_commit=$(git rev-parse origin/uat)
 
-  if [ "$number_of_branches_with_commit" == "1" ]; then
+  # Check if UAT is ahead of dev (i.e., contains a merge commit from dev)
+  if git merge-base --is-ancestor "$dev_commit" "$uat_commit"; then
+    is_patch=false  # UAT contains latest dev -> increase minor
+  else
+    is_patch=true   # Not merged from dev -> treat as patch
+  fi
+elif [ "$current_environment" == "prod" ]; then
+  git fetch origin uat prod >/dev/null 2>&1
+  uat_commit=$(git rev-parse origin/uat)
+  prod_commit=$(git rev-parse origin/prod)
+
+  if git merge-base --is-ancestor "$uat_commit" "$prod_commit"; then
+    is_patch=false
+  else
     is_patch=true
   fi
 fi
+
 
 if [ $is_patch == true ]; then
   last_tag_pattern="$component_name-$current_environment-*"
