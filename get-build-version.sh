@@ -1,61 +1,70 @@
 #!/bin/bash
 
-ENVIRONMENT=$1       # dev / uat / prod
-COMPONENT=$2         # e.g., frontend
-POSTFIX=$3           # commit short hash
+current_environment=$1
+component_name=$2
+version_postfix=$3
 
-# Get latest prod tag version (major.minor.patch)
-LATEST_PROD_TAG=$(git tag --list "${COMPONENT}-prod-*" --sort=-v:refname | head -n 1)
-if [ -z "$LATEST_PROD_TAG" ]; then
-  PROD_MAJOR=0
-  PROD_MINOR=0
-  PROD_PATCH=0
-else
-  PROD_VERSION=$(echo "$LATEST_PROD_TAG" | sed -E "s/^${COMPONENT}-prod-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
-  IFS='.' read -r PROD_MAJOR PROD_MINOR PROD_PATCH <<< "$PROD_VERSION"
-fi
+git fetch --tags
 
-# Get latest tag for current environment
-LATEST_ENV_TAG=$(git tag --list "${COMPONENT}-${ENVIRONMENT}-*" --sort=-v:refname | head -n 1)
-if [ -z "$LATEST_ENV_TAG" ]; then
-  ENV_MAJOR=0
-  ENV_MINOR=0
-  ENV_PATCH=0
-else
-  ENV_VERSION=$(echo "$LATEST_ENV_TAG" | sed -E "s/^${COMPONENT}-${ENVIRONMENT}-([0-9]+\.[0-9]+\.[0-9]+).*/\1/")
-  IFS='.' read -r ENV_MAJOR ENV_MINOR ENV_PATCH <<< "$ENV_VERSION"
-fi
+last_tag_pattern="$component_name-*"
 
-if [[ "$ENVIRONMENT" == "prod" ]]; then
-  # Prod: increment major, reset minor and patch
-  MAJOR=$((PROD_MAJOR + 1))
-  MINOR=0
-  PATCH=0
+is_patch=false
 
-elif [[ "$ENVIRONMENT" == "uat" ]]; then
-  # UAT: keep prod major, increment minor, reset patch
-  MAJOR=$PROD_MAJOR
-  MINOR=$((PROD_MINOR + 1))
-  PATCH=0
+if [ "$current_environment" == "uat" ]; then
+  git fetch origin dev uat >/dev/null 2>&1
+  dev_commit=$(git rev-parse origin/dev)
+  uat_commit=$(git rev-parse origin/uat)
 
-elif [[ "$ENVIRONMENT" == "dev" ]]; then
-  # Dev: keep prod major & minor
-  MAJOR=$PROD_MAJOR
-  MINOR=$PROD_MINOR
-
-  # Reset patch if last dev major/minor differ from prod
-  if [[ $ENV_MAJOR != $PROD_MAJOR ]] || [[ $ENV_MINOR != $PROD_MINOR ]]; then
-    PATCH=0
+  # Check if UAT is ahead of dev (i.e., contains a merge commit from dev)
+  if git merge-base --is-ancestor "$dev_commit" "$uat_commit"; then
+    is_patch=false  # UAT contains latest dev -> increase minor
   else
-    PATCH=$((ENV_PATCH + 1))
+    is_patch=true   # Not merged from dev -> treat as patch
   fi
+elif [ "$current_environment" == "prod" ]; then
+  git fetch origin uat prod >/dev/null 2>&1
+  uat_commit=$(git rev-parse origin/uat)
+  prod_commit=$(git rev-parse origin/prod)
 
-else
-  echo "Unknown environment: $ENVIRONMENT"
-  exit 1
+  if git merge-base --is-ancestor "$uat_commit" "$prod_commit"; then
+    is_patch=false
+  else
+    is_patch=true
+  fi
 fi
 
-NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-NEW_TAG="${COMPONENT}-${ENVIRONMENT}-${NEW_VERSION}-${POSTFIX}"
 
-echo "$NEW_TAG"
+if [ $is_patch == true ]; then
+  last_tag_pattern="$component_name-$current_environment-*"
+fi
+
+number_of_existing_tags=$(git tag --list "$last_tag_pattern" | wc -l)
+
+if [ "$number_of_existing_tags" != "0" ]; then
+  last_tag=$(git describe --match "$last_tag_pattern" --abbrev=0 --tags "$(git rev-list --tags --max-count=1)")
+fi
+
+major=0
+minor=0
+patch=0
+
+if [[ $last_tag ]]; then
+  version_number=$(echo "$last_tag" | cut -d- -f3)
+
+  major=$(echo "$version_number" | cut -d. -f1)
+  minor=$(echo "$version_number" | cut -d. -f2)
+  patch=$(echo "$version_number" | cut -d. -f3)
+fi
+
+if [ "$current_environment" == "prod" ] && [ $is_patch == false ]; then
+  major=$((major + 1))
+  minor=0
+  patch=0
+elif [ "$current_environment" == "uat" ] && [ $is_patch == false ]; then
+  minor=$((minor + 1))
+  patch=0
+else
+  patch=$((patch + 1))
+fi
+
+echo "$component_name-$current_environment-$major.$minor.$patch-$version_postfix"
